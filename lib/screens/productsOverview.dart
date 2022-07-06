@@ -229,8 +229,9 @@ class ProductItem extends StatelessWidget {
         ),
         child: GestureDetector(
           onTap: () => _onItemPress(context, product.id),
-          child: Image.network(
-            product.imageUrl,
+          child: FadeInImage.assetNetwork(
+            placeholder: 'assets/images/product-placeholder.jpeg',
+            image: product.imageUrl,
             fit: BoxFit.cover,
           ),
         ),
