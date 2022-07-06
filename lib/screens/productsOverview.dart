@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:e_shop/providers/auth.dart';
+import 'package:e_shop/widgets/Loader.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,7 +11,6 @@ import '../widgets/AppDrawer.dart';
 import '../widgets/badge.dart';
 import '../providers/products.dart';
 import '../screens/productDetail.dart';
-import '../providers/product.dart';
 
 enum FilterOptions { favorites, all }
 
@@ -21,7 +24,33 @@ class ProductsOverviewScreen extends StatefulWidget {
 }
 
 class _ProductsOverviewScreenState extends State<ProductsOverviewScreen> {
-  bool showFavoritesOnly = false;
+  bool _showFavoritesOnly = false;
+
+  // @override
+  // void didChangeDependencies() {
+  //   if (!_init) {
+  //     _loading = true;
+  //     Provider.of<Products>(context).fetchCreatedProducts().then((isSucceed) {
+  //       print(isSucceed);
+  //       setState(() {
+  //         _loading = false;
+  //       });
+  //     });
+  //   }
+  //   _init = true;
+  //   super.didChangeDependencies();
+  // }
+
+  late Future _productFuture;
+  Future _fetchOrderData() {
+    return Provider.of<Products>(context, listen: false).fetchCreatedProducts();
+  }
+
+  @override
+  void initState() {
+    _productFuture = _fetchOrderData();
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,11 +71,9 @@ class _ProductsOverviewScreenState extends State<ProductsOverviewScreen> {
             ],
             onSelected: (FilterOptions selectedValue) {
               if (selectedValue == FilterOptions.favorites) {
-                // products.showFavoritesOnly = true;
-                setState(() => showFavoritesOnly = true);
+                setState(() => _showFavoritesOnly = true);
               } else {
-                // products.showFavoritesOnly = false;
-                setState(() => showFavoritesOnly = false);
+                setState(() => _showFavoritesOnly = false);
               }
             },
           ),
@@ -66,7 +93,24 @@ class _ProductsOverviewScreenState extends State<ProductsOverviewScreen> {
           ),
         ],
       ),
-      body: ProductGrid(showFavoritesOnly: showFavoritesOnly),
+      body: FutureBuilder(
+          future: _productFuture,
+          builder: (
+            _,
+            productsAsync,
+          ) {
+            if (productsAsync.connectionState == ConnectionState.waiting) {
+              return const Loader(
+                isFullScreen: true,
+                isLoading: true,
+              );
+            } else {
+              if (productsAsync.hasError) {
+                return Container();
+              }
+              return ProductGrid(showFavoritesOnly: _showFavoritesOnly);
+            }
+          }),
       drawer: const AppDrawer(),
     );
   }
@@ -76,35 +120,38 @@ class ProductGrid extends StatelessWidget {
   final bool showFavoritesOnly;
   const ProductGrid({Key? key, this.showFavoritesOnly = false})
       : super(key: key);
-
   @override
   Widget build(BuildContext context) {
-    final products = Provider.of<Products>(context);
-    final favoritesOnlyProducts =
-        showFavoritesOnly ? products.favoritesItems : [];
-    final productsToShow =
-        showFavoritesOnly ? favoritesOnlyProducts : products.items;
-    return GridView.builder(
-      padding: const EdgeInsets.all(10),
-      itemCount: productsToShow.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 1.5,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10),
-      itemBuilder: (_, index) {
-        //// like here we use ChangeNotifierProvider.value because we need to listen to the values which already have been instantiated.
-        return ChangeNotifierProvider<Product>.value(
-          value: productsToShow[index],
-          child: const ProductItem(),
-        );
-      },
-    );
+    return Consumer<Products>(builder: (_, products, __) {
+      final favoritesOnlyProducts =
+          showFavoritesOnly ? products.favoritesItems : [];
+      final productsToShow =
+          showFavoritesOnly ? favoritesOnlyProducts : products.items;
+      return GridView.builder(
+        padding: const EdgeInsets.all(10),
+        itemCount: productsToShow.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 1.5,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10),
+        itemBuilder: (_, index) {
+          //// like here we use ChangeNotifierProvider.value because we need to listen to the values which already have been instantiated.
+          return ChangeNotifierProvider<Product>.value(
+            value: productsToShow[index],
+            child: ProductItem(),
+          );
+        },
+      );
+    });
   }
 }
 
 class ProductItem extends StatelessWidget {
-  const ProductItem({Key? key}) : super(key: key);
+  Timer? _debounce;
+  int count = 0;
+
+  ProductItem({Key? key}) : super(key: key);
 
   void _onItemPress(BuildContext context, String productId) {
     Navigator.of(context)
@@ -114,6 +161,8 @@ class ProductItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final product = Provider.of<Product>(context, listen: false);
+    final snackbar = ScaffoldMessenger.of(context).showSnackBar;
+    final authData = Provider.of<Auth>(context);
 
     //// just like consumer in react context, we have consumer here as well, which automatically rerenders when the data belongs to it changes;
     //// this is the syntatic sugar for Provider.of<Product>(context) and use product in the widget;
@@ -137,7 +186,20 @@ class ProductItem extends StatelessWidget {
                 color: Colors.redAccent,
               ),
               onPressed: () {
-                product.toggleFavorite();
+                if (_debounce?.isActive ?? false) _debounce?.cancel();
+                _debounce = Timer(const Duration(milliseconds: 250), () async {
+                  print(++count);
+                  try {
+                    await product.toggleFavorite(
+                        authData.token ?? '', authData.userId ?? '');
+                  } catch (e) {
+                    snackbar(SnackBar(
+                        content: Text(
+                      e.toString(),
+                      textAlign: TextAlign.center,
+                    )));
+                  }
+                });
               },
             ),
             child: null,
@@ -148,6 +210,18 @@ class ProductItem extends StatelessWidget {
                   color: Colors.lightBlueAccent),
               onPressed: () {
                 cart.addItem(product.id, product.price, product.title);
+                final snackBar = ScaffoldMessenger.of(context);
+                snackBar.hideCurrentSnackBar();
+                snackBar.showSnackBar(SnackBar(
+                  content: const Text('Item added to cart'),
+                  duration: const Duration(seconds: 2),
+                  action: SnackBarAction(
+                    label: 'Undo',
+                    onPressed: () {
+                      cart.removeSingleItem(product.id);
+                    },
+                  ),
+                ));
               },
             ),
           ),

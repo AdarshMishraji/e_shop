@@ -1,3 +1,6 @@
+import 'package:e_shop/providers/auth.dart';
+import 'package:e_shop/screens/auth.dart';
+import 'package:e_shop/screens/editProduct.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +11,7 @@ import '../screens/order.dart';
 import './screens/productsOverview.dart';
 import './screens/productDetail.dart';
 import './providers/products.dart';
+import '../screens/userProdcuts.dart';
 
 void main() => runApp(const Root());
 
@@ -24,28 +28,59 @@ class Root extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => Products(),
+          create: (_) => Auth(),
+        ),
+        ChangeNotifierProxyProvider<Auth, Products>(
+          update: (_, auth, prevState) => Products(
+              prevState == null ? [] : prevState.items,
+              auth.token ?? '',
+              auth.userId ?? ''),
+          create: (_) => Products([], '', ''),
         ),
         ChangeNotifierProvider(
           create: (_) => Carts(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => Orders(),
+        ChangeNotifierProxyProvider<Auth, Orders>(
+          update: (_, auth, prevState) => Orders(
+              prevState == null ? [] : prevState.orders,
+              auth.token ?? '',
+              auth.userId ?? ''),
+          create: (_) => Orders([], '', ''),
         )
       ],
-      child: MaterialApp(
-        title: 'E-Shop',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
-        routes: {
-          '/': (_) => ProductsOverviewScreen(),
-          ProductsOverviewScreen.routeName: (_) => ProductsOverviewScreen(),
-          ProductDetailScreen.routeName: (_) => const ProductDetailScreen(),
-          CartScreen.routeName: (_) => const CartScreen(),
-          OrdersScreen.routeName: (_) => const OrdersScreen(),
-        },
-      ),
+      child: Consumer<Auth>(builder: (_, auth, __) {
+        print('builded');
+        return MaterialApp(
+          title: 'E-Shop',
+          theme: ThemeData(
+            primarySwatch: Colors.blue,
+          ),
+          home: auth.isUserAuthenticated
+              ? const ProductsOverviewScreen()
+              : FutureBuilder<dynamic>(
+                  future: auth.tryAutoLogin(),
+                  builder: (_, resp) {
+                    if (resp.connectionState == ConnectionState.waiting) {
+                      return Container(); //splash
+                    }
+                    if (resp.data == false) {
+                      return const AuthScreen();
+                    } else {
+                      return Container(); //splash
+                    }
+                  }),
+          routes: {
+            ProductsOverviewScreen.routeName: (_) =>
+                const ProductsOverviewScreen(),
+            ProductDetailScreen.routeName: (_) => const ProductDetailScreen(),
+            CartScreen.routeName: (_) => const CartScreen(),
+            OrdersScreen.routeName: (_) => const OrdersScreen(),
+            UserProductsScreen.routeName: (_) => const UserProductsScreen(),
+            EditProductScreen.routeName: (_) => const EditProductScreen(),
+            AuthScreen.routeName: (_) => const AuthScreen(),
+          },
+        );
+      }),
     );
   }
 }

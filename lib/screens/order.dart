@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:e_shop/widgets/Loader.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,22 +9,59 @@ import '../providers/carts.dart';
 import '../providers/orders.dart';
 import '../widgets/AppDrawer.dart';
 
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends StatefulWidget {
   static const String routeName = '/orders';
 
   const OrdersScreen({Key? key}) : super(key: key);
 
   @override
+  State<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends State<OrdersScreen> {
+  late Future _orderFuture;
+  Future _fetchOrderData() {
+    return Provider.of<Orders>(context, listen: false).fetchCreatedOrders();
+  }
+
+  @override
+  void initState() {
+    _orderFuture = _fetchOrderData();
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final orderData = Provider.of<Orders>(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text("Orders"),
       ),
-      body: ListView.builder(
-        itemBuilder: (_, index) =>
-            OrderItemWidget(order: orderData.orders[index]),
-        itemCount: orderData.orders.length,
+      body: RefreshIndicator(
+        onRefresh: () =>
+            Provider.of<Orders>(context, listen: false).fetchCreatedOrders(),
+        child: FutureBuilder(
+          future: _orderFuture,
+          builder: (_, result) {
+            if (result.connectionState == ConnectionState.waiting) {
+              return const Loader(
+                isFullScreen: true,
+                isLoading: true,
+              );
+            } else {
+              if (result.hasError) {
+                return Container();
+              } else {
+                return Consumer<Orders>(builder: (_, orderData, ___) {
+                  return ListView.builder(
+                    itemBuilder: (_, index) =>
+                        OrderItemWidget(order: orderData.orders[index]),
+                    itemCount: orderData.orders.length,
+                  );
+                });
+              }
+            }
+          },
+        ),
       ),
       drawer: const AppDrawer(),
     );
@@ -51,7 +89,7 @@ class _OrderItemWidgetState extends State<OrderItemWidget> {
           ListTile(
             title: Text('\$${widget.order.amount}'),
             subtitle: Text(
-                DateFormat('dd-MM-yyyy hh:mm').format(widget.order.dateTime)),
+                DateFormat('dd-MM-yyyy hh:mm').format(widget.order.orderAt)),
             trailing: IconButton(
               icon: Icon(
                 expanded ? Icons.expand_less : Icons.expand_more,

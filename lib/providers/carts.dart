@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+enum CartItemProperties {
+  id('id'),
+  title('title'),
+  quantity('quantity'),
+  price('price');
+
+  const CartItemProperties(this.name);
+  final String name;
+}
+
 class CartItem {
   final String id;
   final String title;
@@ -12,6 +22,11 @@ class CartItem {
     required this.price,
     this.quantity = 0,
   });
+
+  @override
+  String toString() {
+    return '$id, $title, $price, $quantity x';
+  }
 }
 
 class Carts with ChangeNotifier {
@@ -57,6 +72,24 @@ class Carts with ChangeNotifier {
 
   void removeItem(String productId) {
     _items.remove(productId);
+    notifyListeners();
+  }
+
+  void removeSingleItem(String productId) {
+    if (_items.containsKey(productId)) {
+      if (_items[productId]!.quantity == 1) {
+        _items.remove(productId);
+        notifyListeners();
+        return;
+      }
+      _items.update(
+          productId,
+          (value) => CartItem(
+              id: value.id,
+              title: value.title,
+              price: value.price,
+              quantity: value.quantity + 1));
+    }
     notifyListeners();
   }
 

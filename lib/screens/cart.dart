@@ -1,3 +1,4 @@
+import 'package:e_shop/widgets/Loader.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -42,14 +43,7 @@ class CartScreen extends StatelessWidget {
                     ),
                     backgroundColor: Theme.of(context).primaryColor,
                   ),
-                  TextButton(
-                      onPressed: () {
-                        Provider.of<Orders>(context, listen: false).addOrders(
-                            cart.items.values.toList(), cart.totalAmount);
-                        cart.clear();
-                        Navigator.of(context).pushNamed(OrdersScreen.routeName);
-                      },
-                      child: const Text('ORDER NOW'))
+                  OrderButton(cart: cart),
                 ],
               ),
             ),
@@ -67,6 +61,54 @@ class CartScreen extends StatelessWidget {
           ))
         ],
       ),
+    );
+  }
+}
+
+class OrderButton extends StatefulWidget {
+  const OrderButton({
+    Key? key,
+    required this.cart,
+  }) : super(key: key);
+
+  final Carts cart;
+
+  @override
+  State<OrderButton> createState() => _OrderButtonState();
+}
+
+class _OrderButtonState extends State<OrderButton> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: widget.cart.totalAmount > 0
+          ? () {
+              setState(() {
+                _isLoading = true;
+              });
+              Provider.of<Orders>(context, listen: false)
+                  .addOrders(widget.cart.items.values.toList(),
+                      widget.cart.totalAmount)
+                  .then((isSuccess) {
+                if (isSuccess) {
+                  Navigator.of(context).pushNamed(OrdersScreen.routeName);
+                  widget.cart.clear();
+                }
+              }).whenComplete(() {
+                setState(() {
+                  _isLoading = false;
+                });
+              });
+            }
+          : null,
+      child: _isLoading
+          ? const Loader(
+              isFullScreen: false,
+              isLoading: true,
+            )
+          : const Text('ORDER NOW'),
     );
   }
 }
@@ -95,6 +137,31 @@ class CartItemWidget extends StatelessWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (direction) {
         onRemoveCartItem();
+      },
+      confirmDismiss: (_) {
+        return showDialog(
+          context: context,
+          builder: (ctx) {
+            return AlertDialog(
+              title: const Text('Are u sure?'),
+              content: const Text('Do u want 2 remove the item from cart?'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop(true);
+                  },
+                  child: const Text('Yes'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop(false);
+                  },
+                  child: const Text('No'),
+                ),
+              ],
+            );
+          },
+        );
       },
       key: ValueKey(cartItem.id),
       child: Card(
